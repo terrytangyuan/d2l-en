@@ -62,6 +62,18 @@ def conv_block(input_channels, num_channels):
         nn.Conv2d(input_channels, num_channels, kernel_size=3, padding=1))
 ```
 
+```{.python .input}
+#@tab tensorflow
+from d2l import tensorflow as d2l
+import tensorflow as tf
+def conv_block(num_channels):
+    blk = tf.keras.models.Sequential()
+    blk.add(tf.keras.layers.BatchNormalization())
+    blk.add(tf.keras.layers.ReLU())
+    blk.add(tf.keras.layers.Conv2D(num_channels, kernel_size=3, padding='same'))
+    return blk
+```
+
 A dense block consists of multiple `conv_block` units, each using the same number of output channels. In the forward computation, however, we concatenate the input and output of each block on the channel dimension.
 
 ```{.python .input}
@@ -100,6 +112,24 @@ class DenseBlock(nn.Module):
         return X
 ```
 
+```{.python .input}
+#@tab tensorflow
+class DenseBlock(tf.keras.Model):
+    def __init__(self, num_convs, num_channels, **kwargs):
+        super(DenseBlock, self).__init__(**kwargs)
+        self.net = tf.keras.models.Sequential()
+        for _ in range(num_convs):
+            self.net.add(conv_block(num_channels))
+
+    def call(self, X):
+        for blk in self.net.layers:
+        Y = blk(X)
+            # Concatenate the input and output of each block on the channel
+            # dimension
+            X = tf.keras.layers.Concatenate()([X,Y])
+        return X
+```
+
 In the following example, we define a convolution block (`DenseBlock`) with two blocks of 10 output channels. When using an input with 3 channels, we will get an output with the $3+2\times 10=23$ channels. The number of convolution block channels controls the increase in the number of output channels relative to the number of input channels. This is also referred to as the growth rate.
 
 ```{.python .input}
@@ -114,6 +144,14 @@ Y.shape
 #@tab pytorch
 blk = DenseBlock(2, 3, 10)
 X = torch.randn(4, 3, 8, 8)
+Y = blk(X)
+Y.shape
+```
+
+```{.python .input}
+#@tab tensorflow
+blk = DenseBlock(2, 10)
+X = tf.random.uniform((4, 8, 8, 3))
 Y = blk(X)
 Y.shape
 ```
@@ -140,6 +178,23 @@ def transition_block(input_channels, num_channels):
         nn.AvgPool2d(kernel_size=2, stride=2))
 ```
 
+```{.python .input}
+#@tab tensorflow
+class TransitionBlock(tf.keras.Model):
+    def __init__(self, num_channels, **kwargs):
+        super(TransitionBlock, self).__init__(**kwargs)
+        self.batch_norm = tf.keras.layers.BatchNormalization()
+        self.relu = tf.keras.layers.ReLU()
+        self.conv = tf.keras.layers.Conv2D(num_channels, kernel_size=1)
+        self.avg_pool = tf.keras.layers.AvgPool2D(pool_size=2, strides=2)
+
+    def call(self, x):
+        x =  self.batch_norm(x)
+        x =  self.relu(x)
+        x =  self.conv(x)
+        return self.avg_pool(x)
+```
+
 Apply a transition layer with 10 channels to the output of the dense block in the previous example.  This reduces the number of output channels to 10, and halves the height and width.
 
 ```{.python .input}
@@ -151,6 +206,12 @@ blk(Y).shape
 ```{.python .input}
 #@tab pytorch
 blk = transition_block(23, 10)
+blk(Y).shape
+```
+
+```{.python .input}
+#@tab tensorflow
+blk = TransitionBlock(10)
 blk(Y).shape
 ```
 
@@ -171,6 +232,15 @@ b1 = nn.Sequential(
     nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3),
     nn.BatchNorm2d(64), nn.ReLU(),
     nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+```
+
+```{.python .input}
+#@tab tensorflow
+b1 = tf.keras.models.Sequential()
+b1.add(tf.keras.layers.Conv2D(64, kernel_size=7, strides=2, padding='same'))
+b1.add(tf.keras.layers.BatchNormalization())
+b1.add(tf.keras.layers.ReLU())
+b1.add(tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding='same'))
 ```
 
 Then, similar to the four residual blocks that ResNet uses, DenseNet uses four dense blocks. Similar to ResNet, we can set the number of convolutional layers used in each dense block. Here, we set it to 4, consistent with the ResNet-18 in the previous section. Furthermore, we set the number of channels (i.e., growth rate) for the convolutional layers in the dense block to 32, so 128 channels will be added to each dense block.
